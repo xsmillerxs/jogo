@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Distrito Atlas - A Nova Era</title>
+    <style>
+        :root { --primary: #aa0000; --danger: #ff0000; --accent: #ff3333; --dark-bg: #050000; }
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Courier New', Courier, monospace; touch-action: none; /* Evita que a tela dê zoom ou arraste no mobile */ }
+        
+        /* HUD */
+        #hud { position: absolute; top: 15px; left: 15px; z-index: 100; pointer-events: none; display: none;}
+        .bar-container { background: rgba(10,0,0,0.85); padding: 10px; border-radius: 4px; border-left: 4px solid var(--primary); margin-bottom: 8px; min-width: 160px; box-shadow: 0 4px 10px rgba(255,0,0,0.1); }
+        .label { font-size: 11px; color: #666; text-transform: uppercase; letter-spacing: 2px; }
+        .val { font-weight: bold; color: #ccc; font-size: 18px; }
+
+        /* Minimap */
+        #minimap { position: absolute; top: 15px; right: 15px; width: 100px; height: 100px; background: rgba(10,0,0,0.9); border: 2px solid var(--primary); border-radius: 50%; z-index: 100; overflow: hidden; box-shadow: 0 0 20px rgba(170,0,0,0.4); display: none;}
+        @media (min-width: 768px) { #minimap { width: 130px; height: 130px; } }
+        #map-canvas { width: 100%; height: 100%; }
+
+        /* Quiz Overlay */
+        #quiz-overlay { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 85%; max-width: 400px; background: rgba(10, 0, 0, 0.95); border: 2px solid var(--danger); padding: 20px; color: #fff; display: none; z-index: 500; border-radius: 8px; text-align: center; box-shadow: 0 0 40px rgba(255, 0, 0, 0.5); }
+        .option-btn { background: #1a0000; border: 1px solid #440000; padding: 12px; margin: 8px 0; cursor: pointer; border-radius: 4px; transition: 0.3s; font-size: 16px; color: #aaa; font-family: 'Courier New', Courier, monospace;}
+        .option-btn:hover { background: var(--danger); color: #fff; font-weight: bold; box-shadow: 0 0 15px var(--danger); }
+
+        /* Mobile Controls */
+        #controls { position: absolute; bottom: 30px; left: 30px; display: none; grid-template-columns: repeat(3, 50px); gap: 10px; z-index: 200; }
+        .joy-btn { width: 50px; height: 50px; background: rgba(255,0,0,0.15); border: 2px solid rgba(255,0,0,0.4); border-radius: 50%; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: bold; user-select: none; font-size: 20px;}
+        .joy-btn:active { background: rgba(255,0,0,0.5); }
+        
+        /* Screens (Start & Game Over) */
+        .full-screen-overlay { 
+            position: absolute; width: 100%; height: 100%; 
+            background: radial-gradient(circle at center, #1a0000 0%, #000000 80%);
+            display: flex; flex-direction: column; align-items: center; justify-content: center; 
+            z-index: 1000; color: #fff; text-align: center; 
+        }
+        
+        #menu-content, #death-content { display: flex; flex-direction: column; align-items: center; }
+        .full-screen-overlay h1 { font-size: 3em; margin-bottom: 5px; color: var(--danger); text-shadow: 2px 2px 0px #330000, 0 0 20px rgba(255,0,0,0.6); letter-spacing: 4px; text-transform: uppercase; }
+        @media (min-width: 768px) { .full-screen-overlay h1 { font-size: 3.5em; } }
+        .death-title { font-size: 3.5em !important; color: #ff0000 !important; text-shadow: 0 0 30px red !important; }
+        
+        .game-lore, .death-message { background: rgba(0, 0, 0, 0.7); padding: 15px; border: 1px solid #330000; max-width: 600px; font-size: 1em; line-height: 1.6; margin: 20px; box-shadow: inset 0 0 20px rgba(255,0,0,0.05); color: #999; }
+        @media (min-width: 768px) { .game-lore, .death-message { padding: 25px; font-size: 1.1em; } }
+        .game-lore b { color: var(--danger); }
+        .death-message { color: #ccc; border-color: red;}
+        
+        .btn-action { background: #0a0000; color: var(--danger); border: 2px solid var(--primary); padding: 15px 30px; font-size: 18px; font-weight: bold; cursor: pointer; margin-top: 10px; font-family: 'Courier New', Courier, monospace; transition: all 0.3s ease; text-transform: uppercase; letter-spacing: 2px; }
+        .btn-action:hover { background: var(--danger); color: #fff; box-shadow: 0 0 30px rgba(255,0,0,0.8); border-color: #fff; }
+
+        #confirm-content { display: none; flex-direction: column; align-items: center; max-width: 500px; padding: 20px; }
+        #confirm-content h2 { color: var(--danger); font-size: 1.8em; text-shadow: 0 0 10px red; }
+        #confirm-content p { color: #ccc; font-size: 1.1em; margin-bottom: 30px; }
+        .btn-yes { background: #220000; color: #fff; border: 1px solid red; padding: 15px 30px; margin: 10px; font-size: 18px; cursor: pointer; transition: 0.1s; font-family: inherit; font-weight: bold; }
+        .btn-yes:hover { background: red; color: black; transform: translate(2px, -2px); box-shadow: -4px 4px 0px #440000; }
+        .btn-no { background: transparent; color: #666; border: 1px solid #333; padding: 10px 20px; margin: 10px; font-size: 14px; cursor: pointer; transition: 0.3s; font-family: inherit; }
+        .btn-no:hover { color: #fff; border-color: #fff; }
+        
+        .credits { margin-top: 50px; font-size: 0.8em; color: #444; }
+        .credits a { color: #880000; text-decoration: none; font-weight: bold; transition: 0.2s; }
+        .credits a:hover { color: var(--danger); text-shadow: 0 0 10px red; }
+
+        #death-screen { display: none; background: radial-gradient(circle at center, #330000 0%, #000000 80%); }
+    </style>
+</head>
+<body>
+
+<div id="start-screen" class="full-screen-overlay">
+    <div id="menu-content">
+        <h1>Distrito Atlas</h1>
+        <span style="font-size: 1.2em; color: #666; letter-spacing: 5px;">A NOVA ERA</span>
+        <div class="game-lore">
+            <p>Tributos… bem-vindos à arena.”</p>
+            <p>Os Cristais do Conhecimento foram espalhados. Cada um guarda um desafio. <b>Cada erro… tem consequência.</b>.<br>
+            Mas cuidado... o <b>O sistema observa. O tempo corre. Aqui, não vence o mais forte… vence quem responde.</p>
+        </div>
+        <button class="btn-action" onclick="showConfirm()">Iniciar Exploração</button>
+        <div class="credits">Desenvolvido por <a href="https://instagram.com/xxmillerxs" target="_blank">@xxmillerxs</a></div>
+    </div>
+
+    <div id="confirm-content">
+        <h2>É isso mesmo que você deseja?</h2>
+        <p>HAHAHA... Saiba que não tem volta. A escuridão não perdoa intrusos.</p>
+        <div>
+            <button class="btn-yes" onclick="startGame()">SIM, EU ACEITO</button><br>
+            <button class="btn-no" onclick="cancelGame()">NÃO, SOU COVARDE</button>
+        </div>
+    </div>
+</div>
+
+<div id="death-screen" class="full-screen-overlay">
+    <div id="death-content">
+        <h1 class="death-title">CONSUMIDO</h1>
+        <div class="death-message">
+            <p>Sua luz se apagou nas ruínas do Distrito Atlas.</p>
+            <p>O Clone Sombrio agora habita sua casca vazia. O conhecimento foi perdido para sempre.</p>
+        </div>
+        <button class="btn-action" onclick="restartGame()">Tentar Novamente</button>
+    </div>
+</div>
+
+<div id="hud">
+    <div class="bar-container">
+        <div class="label">Sinal Vital</div>
+        <div class="val">🩸 <span id="hp-val">100</span>%</div>
+    </div>
+    <div class="bar-container">
+        <div class="label">Cristais Extraídos</div>
+        <div class="val">♦ <span id="score-val">0</span> / 4</div>
+    </div>
+</div>
+
+<div id="minimap"><canvas id="map-canvas"></canvas></div>
+
+<div id="quiz-overlay">
+    <h3 id="q-text">Acessando terminal...</h3>
+    <div id="q-options"></div>
+</div>
+
+<div id="controls">
+    <div></div><div class="joy-btn" id="btn-up">W</div><div></div>
+    <div class="joy-btn" id="btn-left">A</div><div class="joy-btn" id="btn-down">S</div><div class="joy-btn" id="btn-right">D</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
+
+<script>
+let scene, camera, renderer, clock, player, monster, mapCtx;
+let walls = [], totems = [], moveKeys = {}, started = false, inQuiz = false;
+let hp = 100, score = 0;
+
+// Detector de Mobile
+const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+const cellSize = 5;
+
+// Variáveis de Áudio
+let walkingSound, monsterSound;
+
+// Configurações do Spawn inicial
+const playerStartPos = { x: 0, z: 0 };
+const monsterStartPos = { x: 15, z: 10 };
+
+const questDB = [
+    { q: "Qual o maior país da América do Sul?", a: ["Brasil", "Argentina", "Peru"], c: 0 },
+    { q: "Qual continente tem mais países?", a: ["Ásia", "África", "Europa"], c: 1 },
+    { q: "A capital da França é?", a: ["Roma", "Londres", "Paris"], c: 2 },
+    { q: "Oceano que banha o Brasil?", a: ["Pacífico", "Atlântico", "Índico"], c: 1 }
+];
+
+const mazeLayout = [
+    [1,1,1,1,1,1,1,1,1,1,1,1],
+    [1,0,0,0,1,0,0,0,0,0,2,1],
+    [1,0,1,0,1,0,1,1,1,1,0,1],
+    [1,2,1,0,0,0,1,0,0,0,0,1],
+    [1,0,1,1,1,1,1,0,1,1,0,1],
+    [1,0,0,0,0,2,0,0,1,0,0,1],
+    [1,1,1,0,1,1,1,0,1,0,1,1],
+    [1,0,0,0,0,0,0,0,1,2,0,1],
+    [1,1,1,1,1,1,1,1,1,1,3,1]
+];
+
+function showConfirm() {
+    document.getElementById('menu-content').style.display = 'none';
+    document.getElementById('confirm-content').style.display = 'flex';
+}
+
+function cancelGame() {
+    document.getElementById('confirm-content').style.display = 'none';
+    document.getElementById('menu-content').style.display = 'flex';
+}
+
+function initAudio() {
+    if (!walkingSound) {
+        walkingSound = new Audio('https://actions.google.com/sounds/v1/foley/footsteps_on_gravel.ogg');
+        walkingSound.loop = true;
+        walkingSound.volume = 0.4;
+
+        monsterSound = new Audio('https://actions.google.com/sounds/v1/horror/alien_breath.ogg');
+        monsterSound.loop = true;
+        monsterSound.volume = 0; 
+    }
+    monsterSound.play().catch(e => console.log("Áudio bloqueado", e));
+}
+
+function initEngine() {
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x050000); 
+    scene.fog = new THREE.FogExp2(0x050000, 0.04); 
+    clock = new THREE.Clock();
+
+    camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    mapCtx = document.getElementById('map-canvas').getContext('2d');
+    scene.add(new THREE.AmbientLight(0xffffff, 0.35)); 
+
+    const wallGeo = new THREE.BoxGeometry(cellSize, 6, cellSize);
+    const wallMat = new THREE.MeshStandardMaterial({color: 0x1a1a1a, roughness: 0.8});
+    const tacticalBlack = new THREE.MeshStandardMaterial({color: 0x111111});
+
+    // Construção do Mapa
+    for(let r=0; r<mazeLayout.length; r++) {
+        for(let c=0; c<mazeLayout[r].length; c++) {
+            let px = c * cellSize - 30;
+            let pz = r * cellSize - 25;
+            
+            if(mazeLayout[r][c] === 1) {
+                const w = new THREE.Mesh(wallGeo, wallMat);
+                w.position.set(px, 3, pz);
+                scene.add(w); walls.push(w);
+            } else if(mazeLayout[r][c] === 2) {
+                spawnTotem(px, pz);
+            }
+        }
+    }
+
+    // Player
+    player = new THREE.Group();
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.7, 0.7), tacticalBlack);
+    head.position.y = 2.0;
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.3, 0.5), tacticalBlack);
+    body.position.y = 1.1;
+    player.add(head, body);
+    scene.add(player);
+
+    const superLantern = new THREE.SpotLight(0xffffff, 55); 
+    superLantern.position.set(0, 2, 0.5);
+    superLantern.angle = Math.PI / 4; 
+    superLantern.penumbra = 0.4;
+    superLantern.decay = 1.2; 
+    superLantern.distance = 70; 
+    player.add(superLantern);
+    player.add(superLantern.target);
+    superLantern.target.position.set(0, 2, 5); 
+
+    // Monstro
+    monster = new THREE.Group();
+    const mHead = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 0.8), new THREE.MeshStandardMaterial({color: 0xff0000, emissive: 0xff0000}));
+    mHead.position.y = 2.0;
+    const mBody = new THREE.Mesh(new THREE.BoxGeometry(1.0, 1.4, 0.6), new THREE.MeshStandardMaterial({color: 0x330000}));
+    mBody.position.y = 1.1;
+    monster.add(mHead, mBody);
+    scene.add(monster);
+
+    const mLight = new THREE.PointLight(0xff0000, 5, 10);
+    mLight.position.set(0, 2, 0.5);
+    monster.add(mLight);
+
+    setupEvents();
+    window.addEventListener('resize', onWindowResize, false);
+}
+
+function spawnTotem(x, z) {
+    const t = new THREE.Mesh(new THREE.IcosahedronGeometry(0.7), new THREE.MeshStandardMaterial({color: 0xff3333, emissive: 0xaa0000, emissiveIntensity: 1}));
+    t.position.set(x, 1.5, z);
+    scene.add(t);
+    totems.push(t);
+}
+
+function setupEvents() {
+    // Controles de Teclado (PC)
+    window.addEventListener('keydown', e => moveKeys[e.key.toLowerCase()] = true);
+    window.addEventListener('keyup', e => moveKeys[e.key.toLowerCase()] = false);
+
+    if (!isMobile) {
+        // --- EVENTOS PARA PC (Mouse) ---
+        document.body.onclick = () => { if(started && !inQuiz && hp > 0) document.body.requestPointerLock(); };
+        document.addEventListener('mousemove', e => { 
+            if(document.pointerLockElement && hp > 0) player.rotation.y -= e.movementX * 0.003; 
+        });
+    } else {
+        // --- EVENTOS PARA MOBILE (Touch) ---
+        
+        // Câmera: Olhar em volta deslizando o dedo na tela
+        let touchX = null;
+        document.addEventListener('touchstart', e => {
+            // Ignora o deslize se o jogador tocou nos botões ou no quiz
+            if(e.target.closest('#controls') || e.target.closest('#quiz-overlay')) return;
+            touchX = e.touches[0].clientX;
+        }, {passive: false});
+
+        document.addEventListener('touchmove', e => {
+            if(touchX !== null && started && !inQuiz && hp > 0) {
+                let deltaX = e.touches[0].clientX - touchX;
+                player.rotation.y -= deltaX * 0.006; // Sensibilidade do mobile
+                touchX = e.touches[0].clientX;
+            }
+        }, {passive: false});
+
+        document.addEventListener('touchend', () => { touchX = null; });
+
+        // Movimentação: Botões na Tela (D-Pad)
+        const bindBtn = (id, key) => {
+            const btn = document.getElementById(id);
+            btn.addEventListener('touchstart', e => { e.preventDefault(); moveKeys[key] = true; });
+            btn.addEventListener('touchend', e => { e.preventDefault(); moveKeys[key] = false; });
+        };
+        
+        bindBtn('btn-up', 'w');
+        bindBtn('btn-down', 's');
+        bindBtn('btn-left', 'a');
+        bindBtn('btn-right', 'd');
+    }
+}
+
+function onWindowResize() {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+function setInitialState() {
+    hp = 100;
+    score = 0;
+    document.getElementById('hp-val').innerText = hp;
+    document.getElementById('score-val').innerText = score;
+    
+    player.position.set(playerStartPos.x, 0, playerStartPos.z);
+    monster.position.set(monsterStartPos.x, 0, monsterStartPos.z);
+    player.rotation.set(0,0,0);
+}
+
+function startGame() {
+    document.getElementById('start-screen').style.display = 'none';
+    document.getElementById('hud').style.display = 'block';
+    document.getElementById('minimap').style.display = 'block';
+    
+    // Mostra controles mobile apenas se for mobile
+    if(isMobile) document.getElementById('controls').style.display = 'grid';
+    
+    initEngine(); 
+    setInitialState();
+    initAudio();
+    started = true;
+    animate();
+}
+
+function restartGame() {
+    document.getElementById('death-screen').style.display = 'none';
+    setInitialState();
+    
+    totems.forEach(t => scene.remove(t));
+    totems = [];
+    for(let r=0; r<mazeLayout.length; r++) {
+        for(let c=0; c<mazeLayout[r].length; c++) {
+            if(mazeLayout[r][c] === 2) {
+                spawnTotem(c * cellSize - 30, r * cellSize - 25);
+            }
+        }
+    }
+
+    if(monsterSound) {
+        monsterSound.volume = 0;
+        monsterSound.play().catch(()=>{});
+    }
+
+    if(isMobile) document.getElementById('controls').style.display = 'grid';
+
+    started = true;
+    if(!isMobile) document.body.requestPointerLock();
+}
+
+function triggerDeath() {
+    started = false; 
+    if(!isMobile) document.exitPointerLock(); 
+    
+    document.getElementById('hud').style.display = 'none';
+    document.getElementById('minimap').style.display = 'none';
+    document.getElementById('quiz-overlay').style.display = 'none';
+    document.getElementById('controls').style.display = 'none'; // Esconde D-Pad
+    inQuiz = false;
+
+    if(walkingSound) walkingSound.pause();
+    if(monsterSound) monsterSound.pause();
+
+    document.getElementById('death-screen').style.display = 'flex';
+}
+
+function openQuiz(t, index) {
+    inQuiz = true;
+    if(!isMobile) document.exitPointerLock();
+    document.getElementById('controls').style.display = 'none'; // Esconde para focar na pergunta
+
+    if(walkingSound) walkingSound.pause(); 
+
+    const q = questDB[Math.floor(Math.random()*questDB.length)];
+    document.getElementById('quiz-overlay').style.display = 'block';
+    const opts = document.getElementById('q-options');
+    document.getElementById('q-text').innerText = q.q;
+    opts.innerHTML = '';
+    q.a.forEach((ans, i) => {
+        const btn = document.createElement('div');
+        btn.className = 'option-btn';
+        btn.innerText = ans;
+        btn.onclick = () => {
+            if(i === q.c) score++; else hp -= 25; 
+            
+            document.getElementById('score-val').innerText = score;
+            document.getElementById('hp-val').innerText = Math.max(0, Math.floor(hp));
+            document.getElementById('quiz-overlay').style.display = 'none';
+            inQuiz = false;
+            
+            if(hp > 0) {
+                if(!isMobile) document.body.requestPointerLock();
+                if(isMobile) document.getElementById('controls').style.display = 'grid';
+            }
+
+            scene.remove(t);
+            totems.splice(index, 1);
+        };
+        opts.appendChild(btn);
+    });
+}
+
+function animate() {
+    requestAnimationFrame(animate); 
+
+    if(!started) return; 
+    
+    if(!inQuiz && hp > 0) {
+        const speed = 0.12;
+        let nx = player.position.x;
+        let nz = player.position.z;
+
+        if(moveKeys['w']) { nx += Math.sin(player.rotation.y)*speed; nz += Math.cos(player.rotation.y)*speed; }
+        if(moveKeys['s']) { nx -= Math.sin(player.rotation.y)*speed; nz -= Math.cos(player.rotation.y)*speed; }
+        if(moveKeys['a']) { nx += Math.sin(player.rotation.y+Math.PI/2)*speed; nz += Math.cos(player.rotation.y+Math.PI/2)*speed; }
+        if(moveKeys['d']) { nx -= Math.sin(player.rotation.y+Math.PI/2)*speed; nz -= Math.cos(player.rotation.y+Math.PI/2)*speed; }
+
+        let pCollision = false;
+        for(let w of walls) {
+            if(Math.abs(nx - w.position.x) < 3.0 && Math.abs(nz - w.position.z) < 3.0) { pCollision = true; break; }
+        }
+        if(!pCollision) { player.position.set(nx, 0, nz); }
+
+        let isMoving = (moveKeys['w'] || moveKeys['s'] || moveKeys['a'] || moveKeys['d']) && !pCollision;
+        if (walkingSound) {
+            if (isMoving) {
+                if (walkingSound.paused) walkingSound.play();
+            } else {
+                if (!walkingSound.paused) walkingSound.pause();
+            }
+        }
+
+        let mSpeed = 0.05;
+        let dirX = player.position.x - monster.position.x;
+        let dirZ = player.position.z - monster.position.z;
+        let angle = Math.atan2(dirX, dirZ);
+        
+        let mNextX = monster.position.x + Math.sin(angle) * mSpeed;
+        let mNextZ = monster.position.z + Math.cos(angle) * mSpeed;
+
+        let mCollision = false;
+        for(let w of walls) {
+            if(Math.abs(mNextX - w.position.x) < 3.0 && Math.abs(mNextZ - w.position.z) < 3.0) { mCollision = true; break; }
+        }
+        
+        if(!mCollision) {
+            monster.position.x = mNextX;
+            monster.position.z = mNextZ;
+        }
+        monster.lookAt(player.position.x, 0, player.position.z);
+
+        let dist = player.position.distanceTo(monster.position);
+        if (monsterSound) {
+            let maxDist = 40; 
+            let vol = 1.0 - (dist / maxDist);
+            monsterSound.volume = Math.max(0, Math.min(1, vol));
+        }
+
+        if(dist < 2.5) {
+            hp -= 0.5; 
+            document.getElementById('hp-val').innerText = Math.max(0, Math.floor(hp));
+        }
+
+        totems.forEach((t, i) => {
+            t.rotation.y += 0.05;
+            if(player.position.distanceTo(t.position) < 2.2) openQuiz(t, i);
+        });
+
+        const camPos = player.position.clone().add(new THREE.Vector3(0, 3.5, -6.5).applyQuaternion(player.quaternion));
+        camera.position.lerp(camPos, 0.1);
+        camera.lookAt(player.position.clone().add(new THREE.Vector3(0, 1.5, 0)));
+        
+        mapCtx.clearRect(0,0,150,150);
+        mapCtx.fillStyle = "rgba(10,0,0,0.8)";
+        mapCtx.fillRect(0,0,150,150);
+        mapCtx.fillStyle = "#fff"; mapCtx.fillRect(73,73,4,4);
+        mapCtx.fillStyle = "#ff0000"; 
+        let rdx = (monster.position.x - player.position.x) * 2 + 75;
+        let rdz = (monster.position.z - player.position.z) * 2 + 75;
+        mapCtx.fillRect(rdx, rdz, 5, 5);
+    }
+    
+    if(hp <= 0 && started) { triggerDeath(); }
+    if(score >= 4) { alert("Você sobreviveu... por enquanto."); location.reload(); }
+    
+    renderer.render(scene, camera);
+}
+</script>
+</body>
+</html>
